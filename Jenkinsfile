@@ -1,30 +1,36 @@
 pipeline {
     agent any
 
-    tools {
-        maven 'maven-3.10.1'
-    }
-
-    
-
     stages {
-        stage('Debug directories') {
+        stage('Git checkout') {
             steps {
-                sh 'pwd'
-                sh 'ls -la'
-                sh 'ls -la target || true'
-                sh 'cat docker-compose.yml'
-                sh 'cat Dockerfile'
+                script {
+                    git credentialsId: 'github-login',
+                        url: 'git@github.com:jabid021/SOPRA-JAVA-260831-GIT.git',
+                        branch: 'main'
+                }
             }
         }
-        stage('Build Maven') {
-            steps {
-                sh 'mvn clean package'
+
+        stage('Maven Package') {
+            agent {
+                docker {
+                    image 'maven:3.10.0-eclipse-temurin-21'
+                    args '''
+                        -v $HOME/.m2:/root/.m2:z
+                        -u root
+                        --network devops
+                    '''
+                    reuseNode true // Permet de partager l'espace de travail entre l'agent Jenkins et l'agent Docker
+                }
             }
-        }
-        stage('Docker Compose') {
+
             steps {
-                sh 'docker compose up -d --build'
+                dir('BOOT-SECURITY/quest-boot') {
+                    withSonarQubeEnv('sonar') {
+                        sh 'mvn clean verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=quest-boot'
+                    }
+                }
             }
         }
     }
